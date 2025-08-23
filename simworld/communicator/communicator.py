@@ -384,9 +384,13 @@ class Communicator:
         if traffic_signal_id not in self.traffic_signal_id_to_name:
             self.traffic_signal_id_to_name[traffic_signal_id] = f'GEN_BP_TrafficSignal_{traffic_signal_id}'
         return self.traffic_signal_id_to_name[traffic_signal_id]
-    
+
     def add_traffic_signal(self, intersection_name, traffic_signal):
         """Add traffic signal.
+
+        Args:
+            intersection_name: Name of the intersection to add the traffic signal to.
+            traffic_signal: Traffic signal object.
         """
         if traffic_signal.type == 'both':
             self.unrealcv.add_vehicle_signal(intersection_name, self.get_traffic_signal_name(traffic_signal.id))
@@ -394,15 +398,14 @@ class Communicator:
             self.unrealcv.add_pedestrian_signal(intersection_name, self.get_traffic_signal_name(traffic_signal.id))
         else:
             raise ValueError(f'Invalid traffic signal type: {traffic_signal.type}')
-    
+
     def traffic_signal_start_simulation(self, intersection_name):
         """Start traffic signal simulation.
-        
+
         Args:
             intersection_name: Name of the intersection to start simulation for.
         """
         self.unrealcv.traffic_signal_start_simulation(intersection_name)
-    
 
     ##############################################################
     # Waypoint-related methods
@@ -573,18 +576,22 @@ class Communicator:
         self.unrealcv.set_movable(object_name, True)
 
     # Initialization methods
-    def spawn_agent(self, agent, model_path, type='humanoid'):
+    def spawn_agent(self, agent, name, model_path='/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C', type='humanoid'):
         """Spawn agent.
 
         Args:
             agent: agent object.
+            name: Agent name.
             model_path: Model path.
             type: Agent type, possible values: 'humanoid', 'dog', ...
         """
         if type == 'humanoid':
             name = self.get_humanoid_name(agent.id)
         else:
-            raise ValueError(f'Not supported agent type: {type}')
+            if name is None:
+                raise ValueError('Agent name is required for non-humanoid agents')
+            else:
+                name = name
         self.unrealcv.spawn_bp_asset(model_path, name)
         # Convert 2D position to 3D (x,y -> x,y,z)
         location_3d = (
@@ -721,6 +728,10 @@ class Communicator:
 
     def spawn_intersection(self, intersection_name, model_path):
         """Spawn intersection.
+
+        Args:
+            intersection_name: Name of the intersection to spawn.
+            model_path: Model path.
         """
         self.unrealcv.spawn_bp_asset(model_path, intersection_name)
 
@@ -900,62 +911,62 @@ class Communicator:
         """
         try:
             sun_direction_str = self.unrealcv.get_sun_direction(weather_manager_name)
-            
+
             # Clean up the string by removing \r\n\t and extra spaces
             cleaned_str = re.sub(r'[\r\n\t]', '', sun_direction_str)
             cleaned_str = re.sub(r'\s+', ' ', cleaned_str).strip()
-            
+
             # Parse JSON
             sun_data = json.loads(cleaned_str)
-            
+
             # Extract rotation string and parse P, Y, R values
-            rotation_str = sun_data.get("rotation", "")
+            rotation_str = sun_data.get('rotation', '')
             # Parse format: "P=-26.000000 Y=-20.000000 R=0.000000"
             pitch_match = re.search(r'P=([-\d.]+)', rotation_str)
             yaw_match = re.search(r'Y=([-\d.]+)', rotation_str)
-            
+
             if pitch_match and yaw_match:
                 pitch = float(pitch_match.group(1))
                 yaw = float(yaw_match.group(1))
                 return pitch, yaw
             else:
-                self.logger.error(f"Failed to parse rotation values from: {rotation_str}")
+                self.logger.error(f'Failed to parse rotation values from: {rotation_str}')
                 return None, None
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to parse sun direction response: {e}")
+            self.logger.error(f'Failed to parse sun direction response: {e}')
             return None, None
-        
+
     def get_sun_intensity(self, weather_manager_name):
         """Get sun intensity.
-        
+
         Args:
             weather_manager_name: Name of the weather manager.
-            
+
         Returns:
             float: Sun intensity value, or 0.0 if parsing fails.
         """
         try:
             sun_intensity_str = self.unrealcv.get_sun_intensity(weather_manager_name)
-            
+
             # Clean up the string by removing \r\n\t and extra spaces
             cleaned_str = re.sub(r'[\r\n\t]', '', sun_intensity_str)
             cleaned_str = re.sub(r'\s+', ' ', cleaned_str).strip()
-            
+
             # Parse JSON
             sun_data = json.loads(cleaned_str)
-            
+
             # Extract SunIntensity value
-            intensity = float(sun_data.get("SunIntensity", 0))
-            
+            intensity = float(sun_data.get('SunIntensity', 0))
+
             return intensity
         except Exception as e:
-            self.logger.error(f"Failed to parse sun intensity response: {e}")
+            self.logger.error(f'Failed to parse sun intensity response: {e}')
             return 0.0
 
     def set_sun_intensity(self, weather_manager_name, intensity):
         """Set sun intensity.
-        
+
         Args:
             weather_manager_name: Name of the weather manager.
             intensity: Intensity of the sun. 0 - 100
@@ -984,21 +995,21 @@ class Communicator:
         """
         try:
             fog_str = self.unrealcv.get_fog(weather_manager_name)
-            
+
             # Clean up the string by removing \r\n\t and extra spaces
             cleaned_str = re.sub(r'[\r\n\t]', '', fog_str)
             cleaned_str = re.sub(r'\s+', ' ', cleaned_str).strip()
-            
+
             # Parse JSON
             fog_data = json.loads(cleaned_str)
-            
-            density = float(fog_data.get("FogDensity", 0))
-            distance = float(fog_data.get("FogDistance", 0))
-            falloff = float(fog_data.get("FogFalloff", 0))
-            
+
+            density = float(fog_data.get('FogDensity', 0))
+            distance = float(fog_data.get('FogDistance', 0))
+            falloff = float(fog_data.get('FogFalloff', 0))
+
             return density, distance, falloff
         except Exception as e:
-            self.logger.error(f"Failed to parse fog response: {e}")
+            self.logger.error(f'Failed to parse fog response: {e}')
             return None, None, None
 
     def set_atmosphere(self, weather_manager_name, rayleigh, mie):
@@ -1022,20 +1033,20 @@ class Communicator:
         """
         try:
             atmosphere_str = self.unrealcv.get_atmosphere(weather_manager_name)
-            
+
             # Clean up the string by removing \r\n\t and extra spaces
             cleaned_str = re.sub(r'[\r\n\t]', '', atmosphere_str)
             cleaned_str = re.sub(r'\s+', ' ', cleaned_str).strip()
-            
+
             # Parse JSON
             atmosphere_data = json.loads(cleaned_str)
-            
-            rayleigh = float(atmosphere_data.get("Rayleigh Scattering Scale", 0))
-            mie = float(atmosphere_data.get("Mie Scattering Scale", 0))
-            
+
+            rayleigh = float(atmosphere_data.get('Rayleigh Scattering Scale', 0))
+            mie = float(atmosphere_data.get('Mie Scattering Scale', 0))
+
             return rayleigh, mie
         except Exception as e:
-            self.logger.error(f"Failed to parse atmosphere response: {e}")
+            self.logger.error(f'Failed to parse atmosphere response: {e}')
             return None, None
 
     def get_weather_info(self, weather_manager_name):
@@ -1049,28 +1060,28 @@ class Communicator:
         """
         try:
             weather_info = {}
-            
+
             # Get sun direction
             pitch, yaw = self.get_sun_direction(weather_manager_name)
             if pitch is not None and yaw is not None:
                 weather_info['sun_direction'] = {'pitch': pitch, 'yaw': yaw}
-            
+
             # Get fog parameters
             density, distance, falloff = self.get_fog(weather_manager_name)
             if density is not None and distance is not None and falloff is not None:
                 weather_info['fog'] = {'density': density, 'distance': distance, 'falloff': falloff}
-            
+
             # Get atmosphere parameters
             rayleigh, mie = self.get_atmosphere(weather_manager_name)
             if rayleigh is not None and mie is not None:
                 weather_info['atmosphere'] = {'rayleigh': rayleigh, 'mie': mie}
-            
+
             return weather_info
         except Exception as e:
-            self.logger.error(f"Failed to get weather info: {e}")
+            self.logger.error(f'Failed to get weather info: {e}')
             return None
-        
-    def spawn_weather_manager(self, weather_manager_name, weather_manager_model_path = '/Game/Weather/BP_WeatherManager.BP_WeatherManager_C'):
+
+    def spawn_weather_manager(self, weather_manager_name, weather_manager_model_path='/Game/Weather/BP_WeatherManager.BP_WeatherManager_C'):
         """Spawn weather manager.
 
         Args:
