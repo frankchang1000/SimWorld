@@ -590,11 +590,11 @@ class Communicator:
         self.unrealcv.set_movable(object_name, True)
 
     # Initialization methods
-    def spawn_agent(self, agent, name, model_path='/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C', type='humanoid'):
+    def spawn_agent(self, agent, name=None, model_path='/Game/TrafficSystem/Pedestrian/Base_User_Agent.Base_User_Agent_C', type='humanoid'):
         """Spawn agent.
 
         Args:
-            agent: agent object.
+            agent: Agent object.
             name: Agent name.
             model_path: Model path.
             type: Agent type, possible values: 'humanoid', 'dog', ...
