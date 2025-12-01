@@ -139,12 +139,12 @@ class Env:
         self.agent_name = self.comm.get_humanoid_name(self.agent.id)
         
         # Define a target position the agent is encouraged to move toward (example value)
-        target = Vector(100, 0)
+        target = Vector(1000, 0)
 
     def step(self):
         self.comm.humanoid_step_forward(self.agent.id, 2.0)
         location = self.comm.unrealcv.get_location(self.agent_name)
-        observation = self.comm.get_camera_observation(self.agent.camera_id)
+        observation = self.comm.get_camera_observation(self.agent.camera_id, 'lit')
         reward = -distance(location, self.target)
 
         return observation, reward
