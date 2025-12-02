@@ -110,6 +110,7 @@ from simworld.communicator.unrealcv import UnrealCV
 from simworld.communicator.communicator import Communicator
 from simworld.agent.humanoid import Humanoid
 from simworld.utils.vector import Vector
+from simworld.llm.base_llm import BaseLLM
 
 
 # Connect to the running Unreal Engine instance via UnrealCV
@@ -151,13 +152,14 @@ class Env:
         observation = self.comm.get_camera_observation(self.agent.camera_id, "lit")
         return observation
 
-    def step(self):
+    def step(self, action):
         """Move the humanoid forward a bit and compute reward."""
         assert self.agent is not None and self.agent_name is not None and self.target is not None, \
             "Call reset() before step()."
 
-        # Apply a simple forward motion
-        self.comm.humanoid_step_forward(self.agent.id, 2.0)
+        # Parse the action text and map it to the action space
+        if "step_forward" in action:
+            self.comm.humanoid_step_forward(self.agent.id, 2.0)
 
         # Get current location from UE (x, y, z) and convert to 2D Vector
         loc_3d = self.comm.unrealcv.get_location(self.agent_name)
@@ -177,16 +179,22 @@ if __name__ == "__main__":
     # Create the environment wrapper
     env = Env(comm)
     obs = env.reset()
+    llm = BaseLLM("GPT-4o")  # Make sure OPENAI_API_KEY is set as an environment variable
+
+    system_prompt = "Your system prompt here"
 
     # Roll out a short trajectory
     for _ in range(100):
-        observation, reward = env.step()
+        user_prompt = f"Current observation: {obs}\nPlease output an action."
+        action = llm.generate_text(system_prompt, user_prompt)
+        obs, reward = env.step(action)
         # Plug this into your RL loop / logging as needed
 ```
 
 
 ## For Contributors
 ### Precommit Setup
+
 We use Google docstring format for our docstrings and the pre-commit library to check our code. To install pre-commit, run the following command:
 
 ```bash
