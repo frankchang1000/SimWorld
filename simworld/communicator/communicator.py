@@ -900,10 +900,10 @@ class Communicator:
                 self.unrealcv.destroy(objects[index])
 
         self.unrealcv.clean_garbage()
-        Humanoid.id_counter = 0
-        Scooter.id_counter = 0
-        Pedestrian.id_counter = 0
-        Vehicle.id_counter = 0
+        Humanoid._id_counter = 0
+        Scooter._id_counter = 0
+        Pedestrian._id_counter = 0
+        Vehicle._id_counter = 0
 
     def clean_traffic_only(self, vehicles, pedestrians, traffic_signals):
         """Clean traffic objects only.
