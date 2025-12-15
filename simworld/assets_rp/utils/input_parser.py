@@ -10,7 +10,7 @@ from simworld.assets_rp.prompt.retrieval_input_prompt import \
 
 class InputParser:
     """The class will parse the input and return 4 parts: asset_to_place, reference_asset_query, relation, surroundings_query."""
-    def __init__(self, model: str = 'gpt-3.5-turbo'):
+    def __init__(self, model: str = 'gpt-5-nano'):
         """Initialize the model of the class.
 
         Args:
@@ -34,15 +34,14 @@ class InputParser:
             system_message = scene_extraction_system_prompt
             user_message = f'Extract the scene details from the following prompt:\n\n{prompt}'
 
-            response = self.client.chat.completions.create(
+            response = self.client.responses.create(
                 model=self.model,
-                messages=[
-                    {'role': 'system', 'content': system_message},
-                    {'role': 'user', 'content': user_message},
-                ],
-                temperature=0
+                instructions=system_message,
+                input=user_message,
+                reasoning={"effort": "minimal"},
+                text={"verbosity": "low"}
             )
-            message_content = response.choices[0].message.content.strip()
+            message_content = response.output_text.strip()
 
             # print('LLM Response:', message_content)
 

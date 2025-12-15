@@ -17,7 +17,7 @@ from .base_llm import BaseLLM
 
 class A2ALLM(BaseLLM):
     """Local Planner (Activity to Action) LLM class for handling interactions with language models."""
-    def __init__(self, model_name: str = 'gpt-4o-mini', url: str = None, provider: str = 'openai'):
+    def __init__(self, model_name: str = 'gpt-5-nano', url: str = None, provider: str = 'openai'):
         """Initialize the Local Planner LLM."""
         super().__init__(model_name, url, provider)
 
@@ -44,27 +44,146 @@ class A2ALLM(BaseLLM):
 
     def _generate_instructions_openai(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
         start_time = time.time()
-        user_content = []
-        user_content.append({'type': 'text', 'text': user_prompt})
-
-        # self.logger.info(f'user_content: {user_content}')
-        for image in images:
-            img_data = self._process_image_to_base64(image)
-            user_content.append({
-                'type': 'image_url',
-                'image_url': {'url': f'data:image/jpeg;base64,{img_data}'}
-            })
+        
+        if images:
+            self.logger.warning("Images not supported in GPT-5 Responses API migration, ignoring images")
+        
+        user_content = user_prompt
 
         try:
-            response = self.client.beta.chat.completions.parse(
+            reasoning_effort = "minimal"
+            text_verbosity = "low"
+            
+            text_format = None
+            if response_format and response_format != BaseModel:
+                if hasattr(response_format, '__name__'):
+                    if response_format.__name__ == 'HighLevelActionSpace':
+                        simplified_schema = {
+                            "type": "object",
+                            "properties": {
+                                "action_queue": {
+                                    "type": "array",
+                                    "items": {"type": "integer"},
+                                    "description": "A list of action indices to be performed"
+                                },
+                                "destination": {
+                                    "anyOf": [
+                                        {
+                                            "type": "array", 
+                                            "items": {"type": "number"},
+                                            "minItems": 2,
+                                            "maxItems": 2
+                                        },
+                                        {"type": "null"}
+                                    ],
+                                    "description": "The [x, y] coordinates of the destination, or null if not needed"
+                                },
+                                "object_name": {
+                                    "anyOf": [
+                                        {"type": "string"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "The name of the object to interact with, or null if not needed"
+                                },
+                                "reasoning": {
+                                    "type": "string", 
+                                    "description": "The reasoning for the chosen actions"
+                                }
+                            },
+                            "required": ["action_queue", "destination", "object_name", "reasoning"],
+                            "additionalProperties": False
+                        }
+                    elif response_format.__name__ == 'LowLevelActionSpace':
+                        simplified_schema = {
+                            "type": "object",
+                            "properties": {
+                                "choice": {
+                                    "type": "integer",
+                                    "enum": [0, 1, 2],
+                                    "description": "The choice of action: 0=do nothing, 1=step, 2=turn"
+                                },
+                                "duration": {
+                                    "anyOf": [
+                                        {"type": "number"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "Duration in seconds for step action, or null if not applicable"
+                                },
+                                "direction": {
+                                    "anyOf": [
+                                        {"type": "integer"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "Direction for step action: 0=forward, 1=backward, or null if not applicable"
+                                },
+                                "angle": {
+                                    "anyOf": [
+                                        {"type": "number"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "Angle in degrees for turn action, or null if not applicable"
+                                },
+                                "clockwise": {
+                                    "anyOf": [
+                                        {"type": "boolean"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "Turn direction: true=clockwise, false=counterclockwise, or null if not applicable"
+                                },
+                                "reasoning": {
+                                    "anyOf": [
+                                        {"type": "string"},
+                                        {"type": "null"}
+                                    ],
+                                    "description": "The reasoning for the chosen action, or null if not provided"
+                                }
+                            },
+                            "required": ["choice", "duration", "direction", "angle", "clockwise", "reasoning"],
+                            "additionalProperties": False
+                        }
+                    else:
+                        original_schema = response_format.model_json_schema()
+                        simplified_schema = original_schema.copy()
+                        if "additionalProperties" not in simplified_schema:
+                            simplified_schema["additionalProperties"] = False
+                else:
+                    simplified_schema = response_format.model_json_schema()
+                    if "additionalProperties" not in simplified_schema:
+                        simplified_schema["additionalProperties"] = False
+                
+                text_format = {
+                    "type": "json_schema",
+                    "name": getattr(response_format, '__name__', 'response'),
+                    "strict": True,
+                    "schema": simplified_schema
+                }
+            
+            # Debug the input format
+            self.logger.info(f'Input type: {type(user_content)}, Input content: {user_content}')
+            self.logger.info(f'Text format: {text_format}')
+            
+            response = self.client.responses.create(
                 model=self.model_name,
-                messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_content}],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
-                response_format=response_format,
+                instructions=system_prompt,
+                input=user_content,
+                max_output_tokens=max_tokens,
+                reasoning={"effort": reasoning_effort},
+                text={"verbosity": text_verbosity, "format": text_format} if text_format else {"verbosity": text_verbosity},
             )
-            action_json = response.choices[0].message.content
+            
+            if text_format:
+                action_json = response.output_text
+                if isinstance(action_json, str):
+                    import json
+                    try:
+                        action_json = json.loads(action_json)
+                        self.logger.info(f'Successfully parsed JSON: {action_json}')
+                    except json.JSONDecodeError as e:
+                        self.logger.error(f'Failed to parse structured output as JSON: {e}')
+                        self.logger.error(f'Raw content: {action_json}')
+                        action_json = None
+            else:
+                action_json = response.output_text
         except Exception as e:
             self.logger.error(f'Error in generate_instructions_openai: {e}')
             action_json = None
@@ -74,28 +193,46 @@ class A2ALLM(BaseLLM):
     def _generate_instructions_openrouter(self, system_prompt, user_prompt, images=[], max_tokens=None, temperature=0.7, top_p=1.0, response_format=BaseModel):
 
         start_time = time.time()
-        user_content = []
-        user_prompt += '\nPlease respond in valid JSON format following this schema: ' + str(response_format.to_json_schema())
-        user_content.append({'type': 'text', 'text': user_prompt})
+        
+        if response_format and response_format != BaseModel:
+            user_prompt += '\nPlease respond in valid JSON format following this schema: ' + str(response_format.model_json_schema())
+        
+        if images:
+            user_content = [{
+                'role': 'user',
+                'content': []
+            }]
+            
+            user_content[0]['content'].append({
+                'type': 'text',
+                'text': user_prompt
+            })
+            
+            for image in images:
+                img_data = self._process_image_to_base64(image)
+                user_content[0]['content'].append({
+                    'type': 'image_url',
+                    'image_url': {'url': f'data:image/jpeg;base64,{img_data}'}
+                })
+        else:
+            user_content = user_prompt
 
         self.logger.info(f'user_content: {user_content}')
-        for image in images:
-            img_data = self._process_image_to_base64(image)
-            user_content.append({
-                'type': 'image_url',
-                'image_url': {'url': f'data:image/jpeg;base64,{img_data}'}
-            })
 
         action_response = None
         try:
-            response = self.client.beta.chat.completions.parse(
+            reasoning_effort = "minimal"
+            text_verbosity = "low"
+            
+            response = self.client.responses.create(
                 model=self.model_name,
-                messages=[{'role': 'system', 'content': system_prompt}, {'role': 'user', 'content': user_content}],
-                max_tokens=max_tokens,
-                temperature=temperature,
-                top_p=top_p,
+                instructions=system_prompt,
+                input=user_content,
+                max_output_tokens=max_tokens,
+                reasoning={"effort": reasoning_effort},
+                text={"verbosity": text_verbosity},
             )
-            action_response = response.choices[0].message.content
+            action_response = response.output_text
         except Exception as e:
             self.logger.error(f'Error in generate_instructions_openrouter: {e}')
             action_response = None
@@ -125,7 +262,7 @@ class A2ALLM(BaseLLM):
         if image.dtype != np.uint8:
             image = (image * 255).astype(np.uint8)
 
-        # Convert to PIL Image
+        # Convert to PIL Imagemedium
         pil_image = Image.fromarray(image)
 
         # Convert to base64

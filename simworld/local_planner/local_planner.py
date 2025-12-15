@@ -77,13 +77,19 @@ class LocalPlanner:
             response_format=HighLevelActionSpace,
         )
         self.logger.info(f'Agent {self.agent.id} Response: {response}, call time: {call_time}')
+        self.logger.info(f'Agent {self.agent.id} Response type: {type(response)}')
 
         if response is None:
             self.logger.error('Parse failed, response is None')
             return None
 
-        actions = HighLevelActionSpace.from_json(response)
-        self.logger.info(f'Agent {self.agent.id} Actions: {actions}')
+        try:
+            actions = HighLevelActionSpace.from_json(response)
+            self.logger.info(f'Agent {self.agent.id} Actions: {actions}')
+        except Exception as e:
+            self.logger.error(f'Agent {self.agent.id} Failed to parse actions from response: {e}')
+            self.logger.error(f'Agent {self.agent.id} Raw response: {response}')
+            return None
 
         return actions
 
@@ -220,12 +226,6 @@ class LocalPlanner:
                 else:
                     action_str += f'I chose to step backward for {vlm_action.duration} seconds.'
 
-                _human_collision, _object_collision, _building_collision = self.communicator.get_collision_number(self.agent.id)
-                if _human_collision > 0 or _object_collision > 0 or _building_collision > 0:
-                    action_str += 'But I have collided with something.'
-
-                self.last_position = Vector(self.agent.position.x, self.agent.position.y)  # Create new Vector instance
-
             elif vlm_action.choice == LowLevelAction.TURN_AROUND:
                 clockwise = 'right' if vlm_action.clockwise else 'left'
                 action_str += f'I chose to turn {clockwise} {vlm_action.angle} degrees.'
@@ -233,6 +233,10 @@ class LocalPlanner:
 
             elif vlm_action.choice == LowLevelAction.DO_NOTHING:
                 action_str += 'I chose to do nothing.'
+
+            _human_collision, _object_collision, _building_collision, _vehicle_collision = self.communicator.get_collision_number(self.agent.id)
+            if _human_collision > 0 or _object_collision > 0 or _building_collision > 0 or _vehicle_collision > 0:
+                action_str += ' But I have collided with something.'
 
             self.action_history.append(action_str)
             if len(self.action_history) > self.max_history_step:

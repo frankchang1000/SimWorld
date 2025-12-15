@@ -33,7 +33,8 @@ setup(
         'pillow',
         'sentence-transformers',
         'faiss-cpu',
-        'openai'
+        'openai',
+        'pyyaml'
     ],
     extras_require={
         'dev': [

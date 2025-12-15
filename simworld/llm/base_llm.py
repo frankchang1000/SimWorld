@@ -123,15 +123,16 @@ class BaseLLM(metaclass=LLMMetaclass):
         top_p: float = None,
         **kwargs,
     ) -> str:
-        response = self.client.chat.completions.create(
+        reasoning_effort = "minimal"
+        text_verbosity = "low"
+        
+        response = self.client.responses.create(
             model=self.model_name,
-            messages=[
-                {'role': 'system', 'content': system_prompt},
-                {'role': 'user', 'content': user_prompt},
-            ],
-            max_tokens=max_tokens,
-            temperature=temperature,
-            top_p=top_p,
+            instructions=system_prompt,
+            input=user_prompt,
+            max_output_tokens=max_tokens,
+            reasoning={"effort": reasoning_effort},
+            text={"verbosity": text_verbosity},
             **kwargs,
         )
-        return response.choices[0].message.content
+        return response.output_text
